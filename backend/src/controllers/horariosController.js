@@ -5,12 +5,10 @@ const createSlot = async (req, res) => {
     try {
         const { fecha, hora_inicio, hora_fin } = req.body;
 
-        // Validación básica
         if (!fecha || !hora_inicio || !hora_fin) {
             return res.status(400).json({ message: 'Fecha, hora de inicio y hora de fin son obligatorios' });
         }
 
-        // Insertar en la base de datos
         const [result] = await db.execute(
             'INSERT INTO horarios_disponibles (fecha, hora_inicio, hora_fin) VALUES (?, ?, ?)',
             [fecha, hora_inicio, hora_fin]
@@ -22,7 +20,6 @@ const createSlot = async (req, res) => {
         });
 
     } catch (error) {
-        // ¿Recuerdas el UNIQUE KEY que pusimos en el script SQL? Aquí nos salva de horarios duplicados.
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(409).json({ message: 'Este bloque de horario ya existe para esta fecha.' });
         }
@@ -34,9 +31,6 @@ const createSlot = async (req, res) => {
 // 2️⃣ Obtener horarios disponibles (USER y ADMIN)
 const getAvailableSlots = async (req, res) => {
     try {
-        // 👇 AQUÍ ESTÁ LA MAGIA: 
-        // Cruzamos horarios_disponibles (hd) con reservas (r).
-        // Traemos solo los horarios donde NO existe una reserva (r.id IS NULL).
         const query = `
             SELECT hd.* FROM horarios_disponibles hd
             LEFT JOIN reservas r ON hd.id = r.horario_id
@@ -45,7 +39,6 @@ const getAvailableSlots = async (req, res) => {
         `;
 
         const [slots] = await db.execute(query);
-
         res.status(200).json(slots);
 
     } catch (error) {
@@ -54,4 +47,58 @@ const getAvailableSlots = async (req, res) => {
     }
 };
 
-module.exports = { createSlot, getAvailableSlots };
+// 3️⃣ NUEVO: Actualizar un horario existente (Editar)
+const updateSlot = async (req, res) => {
+    try {
+        const { id } = req.params; // Sacamos el ID de la URL
+        const { fecha, hora_inicio, hora_fin } = req.body;
+
+        if (!fecha || !hora_inicio || !hora_fin) {
+            return res.status(400).json({ message: 'Todos los campos son obligatorios' });
+        }
+
+        const [result] = await db.execute(
+            'UPDATE horarios_disponibles SET fecha = ?, hora_inicio = ?, hora_fin = ? WHERE id = ?',
+            [fecha, hora_inicio, hora_fin, id]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Horario no encontrado' });
+        }
+
+        res.status(200).json({ message: 'Horario actualizado correctamente' });
+
+    } catch (error) {
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ message: 'Este bloque de horario ya existe.' });
+        }
+        console.error(error);
+        res.status(500).json({ message: 'Error al actualizar el horario' });
+    }
+};
+
+// 4️⃣ NUEVO: Eliminar un horario
+const deleteSlot = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const [result] = await db.execute('DELETE FROM horarios_disponibles WHERE id = ?', [id]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Horario no encontrado' });
+        }
+
+        res.status(200).json({ message: 'Horario eliminado correctamente' });
+
+    } catch (error) {
+        // Si intentamos borrar un horario que ya tiene una reserva, MySQL dará un error de Clave Foránea (ER_ROW_IS_REFERENCED_2)
+        if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+            return res.status(400).json({ message: 'No se puede eliminar este horario porque ya tiene reservas de clientes.' });
+        }
+        console.error(error);
+        res.status(500).json({ message: 'Error al eliminar el horario' });
+    }
+};
+
+// 👇 No olvides exportar las nuevas funciones
+module.exports = { createSlot, getAvailableSlots, updateSlot, deleteSlot };
