@@ -8,7 +8,7 @@ const options = {
         info: {
             title: 'API de Sistema de Reservas',
             version: '1.0.0',
-            description: 'Documentación interactiva de la API para gestión de citas y horarios.',
+            description: 'Documentación interactiva de la API para gestión de reuniones y horarios.',
         },
         servers: [
             {
